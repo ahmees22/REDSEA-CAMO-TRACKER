@@ -1,0 +1,60 @@
+{
+  "name": "camo-tracker",
+  "version": "1.0.0",
+  "description": "Aviation Maintenance Planning System",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "aviation",
+    "camo",
+    "flask",
+    "electron"
+  ],
+  "author": "Antigravity",
+  "license": "ISC",
+  "dependencies": {
+    "electron": "^40.8.0",
+    "fs-extra": "^11.3.4"
+  },
+  "build": {
+    "appId": "com.aviation.camotracker",
+    "productName": "Camo-Tracker",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true
+    },
+    "extraResources": [
+      {
+        "from": "app.py",
+        "to": "app/app.py"
+      },
+      {
+        "from": "static",
+        "to": "app/static"
+      },
+      {
+        "from": "venv/Scripts",
+        "to": "python"
+      },
+      {
+        "from": "venv/Lib",
+        "to": "python/Lib"
+      }
+    ]
+  }
+}
