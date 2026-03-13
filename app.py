@@ -6,7 +6,7 @@ from flask import (Flask, render_template_string, request, jsonify,
                    send_file, redirect, url_for, session)
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv, set_key
-from google import genai
+#from google import genai
 
 load_dotenv()
 
@@ -947,3 +947,4 @@ if __name__ == '__main__':
     print("Starting Aviation Maintenance Planning System (Camo-Tracker)...")
     threading.Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:5000')).start()
     app.run(debug=False, port=5000)
+
