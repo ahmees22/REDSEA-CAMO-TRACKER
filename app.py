@@ -296,13 +296,6 @@ LOGIN_TEMPLATE = r"""
           <i class="fas fa-user-plus"></i> Create Account
         </button>
       </form>
-      <!-- GOOGLE OAUTH -->
-      <div class="mt-5">
-        <div class="relative flex items-center"><div class="flex-1 border-t border-gray-200"></div><span class="px-3 text-xs text-gray-400">or</span><div class="flex-1 border-t border-gray-200"></div></div>
-        <a href="/auth/google" class="mt-4 w-full flex items-center justify-center gap-3 border-2 border-gray-200 hover:border-gray-400 rounded-lg py-3 font-semibold text-gray-700 transition bg-white hover:bg-gray-50">
-          <svg class="w-5 h-5" viewBox="0 0 533.5 544.3"><path d="M533.5 278.4c0-18.5-1.5-37.1-4.7-55.3H272.1v104.8h147c-6.1 33.8-25.7 63.7-54.4 82.7v68h87.7c51.5-47.4 81.1-117.4 81.1-200.2z" fill="#4285f4"/><path d="M272.1 544.3c73.4 0 135.3-24.1 180.4-65.7l-87.7-68c-24.4 16.6-55.9 26-92.6 26-71 0-131.2-47.9-152.8-112.3H28.9v70.1c46.2 91.9 140.3 149.9 243.2 149.9z" fill="#34a853"/><path d="M119.3 324.3c-11.4-33.8-11.4-70.4 0-104.2V150H28.9c-38.6 76.9-38.6 167.5 0 244.4l90.4-70.1z" fill="#fbbc04"/><path d="M272.1 107.7c38.8-.6 76.3 14 104.4 40.8l77.7-77.7C405 24.6 339.7-.8 272.1 0 169.2 0 75.1 58 28.9 150l90.4 70.1c21.5-64.5 81.8-112.4 152.8-112.4z" fill="#ea4335"/></svg>
-          Continue with Google
-        </a>
       </div>
     </div>
     {% endif %}
@@ -342,8 +335,23 @@ def login():
             session['access_token'] = res.session.access_token
             return redirect(url_for('index'))
         except Exception as e:
+            # If email is unconfirmed, try to auto-confirm it using admin client
+            err_str = str(e).lower()
+            if "confirm" in err_str or "verify" in err_str:
+                try:
+                    user_list = supa_admin.auth.admin.list_users()
+                    target = next((u for u in user_list if u.email == email), None)
+                    if target:
+                        supa_admin.auth.admin.update_user_by_id(target.id, {"email_confirm": True})
+                        # Retry
+                        res = supa_anon.auth.sign_in_with_password({"email": email, "password": password})
+                        session['user'] = {'email': res.user.email, 'id': str(res.user.id)}
+                        session['access_token'] = res.session.access_token
+                        return redirect(url_for('index', msg='Account auto-confirmed and logged in!'))
+                except: pass
+            
             return render_template_string(LOGIN_TEMPLATE, mode='login',
-                error="Invalid email or password.", success=None, year=datetime.date.today().year)
+                error=f"Login Error: {str(e)}", success=None, year=datetime.date.today().year)
     return render_template_string(LOGIN_TEMPLATE, mode='login', error=None, success=None, year=datetime.date.today().year)
 
 @app.route('/register', methods=['POST'])
@@ -351,12 +359,20 @@ def register():
     email    = request.form.get('email','').strip()
     password = request.form.get('password','').strip()
     try:
-        supa_anon.auth.sign_up({"email": email, "password": password})
-        return render_template_string(LOGIN_TEMPLATE, mode='login', error=None,
-            success="Account created! Check your email to confirm, then log in.", year=datetime.date.today().year)
+        # Use admin client to create a user that is already confirmed
+        supa_admin.auth.admin.create_user({
+            "email": email,
+            "password": password,
+            "email_confirm": True
+        })
+        # Log in immediately after registration
+        res = supa_anon.auth.sign_in_with_password({"email": email, "password": password})
+        session['user'] = {'email': res.user.email, 'id': str(res.user.id)}
+        session['access_token'] = res.session.access_token
+        return redirect(url_for('index', msg='Registration successful! welcome to Camo-Tracker.'))
     except Exception as e:
         return render_template_string(LOGIN_TEMPLATE, mode='login',
-            error=str(e), success=None, year=datetime.date.today().year)
+            error=f"Registration Error: {str(e)}", success=None, year=datetime.date.today().year)
 
 @app.route('/logout')
 def logout():
@@ -391,36 +407,6 @@ def verify_otp():
     except Exception as e:
         return render_template_string(LOGIN_TEMPLATE, mode='otp',
             error=str(e), success=None, year=datetime.date.today().year)
-
-@app.route('/auth/google')
-def auth_google():
-    try:
-        res = supa_anon.auth.sign_in_with_oauth({"provider": "google",
-              "options": {"redirect_to": request.host_url + "auth/callback"}})
-        return redirect(res.url)
-    except Exception as e:
-        return redirect(url_for('login'))
-
-@app.route('/auth/callback')
-def auth_callback():
-    # Supabase returns token in URL fragment — JS must extract and POST it
-    return render_template_string("""
-<!DOCTYPE html><html><head><title>Authenticating...</title></head>
-<body>
-<script>
-const hash = window.location.hash.substring(1);
-const params = new URLSearchParams(hash);
-const access_token = params.get('access_token');
-if(access_token){
-  fetch('/api/auth/session', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({access_token})
-  }).then(r=>r.json()).then(d=>{ window.location.href='/'; });
-} else { window.location.href='/login'; }
-</script>
-<p style="font-family:sans-serif;text-align:center;margin-top:100px">Authenticating...</p>
-</body></html>
-""")
 
 @app.route('/api/auth/session', methods=['POST'])
 def api_auth_session():
@@ -945,6 +931,5 @@ sb.channel('realtime-aircraft')
 
 if __name__ == '__main__':
     print("Starting Aviation Maintenance Planning System (Camo-Tracker)...")
-    threading.Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:5000')).start()
-    app.run(debug=False, port=5000)
-
+    # threading.Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:5000')).start()
+    app.run(debug=True, port=5000)
