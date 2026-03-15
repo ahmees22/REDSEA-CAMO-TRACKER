@@ -1,0 +1,64 @@
+--- MAIN ---
+Columns:
+['MPD\nITEM\nNUMBER', 'INTERVAL', 'Unnamed: 2', 'ZONE', 'ACCESS', 'APPLICABILITY', 'Unnamed: 6', 'MAN-HOURS', 'TASK DESCRIPTION', 'CMP', 'SOURCE', 'TASK CARD', 'RELATED TASK', 'MAT', 'TOOL', 'NOTES', 'Unnamed: 16', 'Unnamed: 17']
+Sample 0:
+{'MPD\nITEM\nNUMBER': nan, 'INTERVAL': 'THRES.', 'Unnamed: 2': 'REPEAT', 'ZONE': nan, 'ACCESS': nan, 'APPLICABILITY': 'APL', 'Unnamed: 6': 'ENG', 'MAN-HOURS': nan, 'TASK DESCRIPTION': nan, 'CMP': nan, 'SOURCE': nan, 'TASK CARD': nan, 'RELATED TASK': nan, 'MAT': nan, 'TOOL': nan, 'NOTES': nan, 'Unnamed: 16': nan, 'Unnamed: 17': nan}
+Sample 1:
+{'MPD\nITEM\nNUMBER': nan, 'INTERVAL': nan, 'Unnamed: 2': nan, 'ZONE': nan, 'ACCESS': nan, 'APPLICABILITY': nan, 'Unnamed: 6': nan, 'MAN-HOURS': nan, 'TASK DESCRIPTION': nan, 'CMP': nan, 'SOURCE': nan, 'TASK CARD': nan, 'RELATED TASK': nan, 'MAT': nan, 'TOOL': nan, 'NOTES': nan, 'Unnamed: 16': nan, 'Unnamed: 17': nan}
+
+--- 1C TASK LIST ---
+Columns:
+['Unnamed: 0', '240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00', 'Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8', 'Unnamed: 9', 'Unnamed: 10', 'Unnamed: 11', 'Unnamed: 12', 'Unnamed: 13', 'Unnamed: 14', 'Unnamed: 15', 'Unnamed: 16', 'Unnamed: 17']
+Sample 0:
+{'Unnamed: 0': 'SER', '240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00': 'TCM TASK', 'Unnamed: 2': 'DESCRIPTION', 'Unnamed: 3': 'CAT', 'Unnamed: 4': 'SPECREQ', 'Unnamed: 5': 'SIGN', 'Unnamed: 6': nan, 'Unnamed: 7': nan, 'Unnamed: 8': 'C/O', 'Unnamed: 9': 'LAST DONE', 'Unnamed: 10': nan, 'Unnamed: 11': nan, 'Unnamed: 12': 'NEXT DUE', 'Unnamed: 13': nan, 'Unnamed: 14': nan, 'Unnamed: 15': 'REMAIN', 'Unnamed: 16': nan, 'Unnamed: 17': nan}
+Sample 1:
+{'Unnamed: 0': nan, '240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00': nan, 'Unnamed: 2': nan, 'Unnamed: 3': nan, 'Unnamed: 4': nan, 'Unnamed: 5': 'A&C', 'Unnamed: 6': 'AVIO', 'Unnamed: 7': 'RII', 'Unnamed: 8': nan, 'Unnamed: 9': nan, 'Unnamed: 10': nan, 'Unnamed: 11': nan, 'Unnamed: 12': nan, 'Unnamed: 13': nan, 'Unnamed: 14': nan, 'Unnamed: 15': nan, 'Unnamed: 16': nan, 'Unnamed: 17': nan}
+
+--- OOP TASK LIST ---
+Columns:
+['240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00', 'Unnamed: 1', 'Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'LAST DONE', 'Unnamed: 9', 'Unnamed: 10', 'NEXT DUE', 'Unnamed: 12', 'Unnamed: 13', 'REMAIN', 'Unnamed: 15', 'Unnamed: 16']
+Sample 0:
+{'240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00': 'SER', 'Unnamed: 1': 'TASK NO.', 'Unnamed: 2': 'TITLE', 'Unnamed: 3': 'NOTE', 'Unnamed: 4': 'SIGN', 'Unnamed: 5': nan, 'Unnamed: 6': nan, 'Unnamed: 7': 'C/O', 'LAST DONE': nan, 'Unnamed: 9': nan, 'Unnamed: 10': nan, 'NEXT DUE': nan, 'Unnamed: 12': nan, 'Unnamed: 13': nan, 'REMAIN': nan, 'Unnamed: 15': nan, 'Unnamed: 16': nan}
+Sample 1:
+{'240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00': nan, 'Unnamed: 1': nan, 'Unnamed: 2': nan, 'Unnamed: 3': nan, 'Unnamed: 4': 'A&C', 'Unnamed: 5': 'AVIO', 'Unnamed: 6': 'R11', 'Unnamed: 7': nan, 'LAST DONE': 'DY', 'Unnamed: 9': 'FH', 'Unnamed: 10': 'FC', 'NEXT DUE': 'DY', 'Unnamed: 12': 'FH', 'Unnamed: 13': 'FC', 'REMAIN': 'DY', 'Unnamed: 15': 'FH', 'Unnamed: 16': 'FC'}
+
+--- AD CN TASK LIST ---
+Columns:
+['240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00', 'Unnamed: 1', 'Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6']
+Sample 0:
+{'240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00': 'SE', 'Unnamed: 1': 'AD/CN', 'Unnamed: 2': nan, 'Unnamed: 3': 'TITLE', 'Unnamed: 4': 'REFERENCE', 'Unnamed: 5': 'EO NO.', 'Unnamed: 6': 'C/O'}
+Sample 1:
+{'240512 Red Sea - Reg: SU-RSA - MSN 35702 - BOW # RSA20241231 R00': '3', 'Unnamed: 1': '2011-27-03', 'Unnamed: 2': nan, 'Unnamed: 3': 'Flight Controls Step 1 Lubrication (g)(1)(ii)(A) Repetetive Lubrication of THS Jackscrew per par G of this AD and par E Table 1 of SB 737-27A1277 R2, § 3.B.1.n. ', 'Unnamed: 4': nan, 'Unnamed: 5': nan, 'Unnamed: 6': 'red sea'}
+
+--- GEN ---
+Columns:
+['AIRCRAFT SPECIFICATION FILE', 'Unnamed: 1', 'Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8', 'Unnamed: 9']
+Sample 0:
+{'AIRCRAFT SPECIFICATION FILE': 'General Overview', 'Unnamed: 1': nan, 'Unnamed: 2': nan, 'Unnamed: 3': nan, 'Unnamed: 4': nan, 'Unnamed: 5': nan, 'Unnamed: 6': nan, 'Unnamed: 7': nan, 'Unnamed: 8': nan, 'Unnamed: 9': nan}
+Sample 1:
+{'AIRCRAFT SPECIFICATION FILE': nan, 'Unnamed: 1': nan, 'Unnamed: 2': nan, 'Unnamed: 3': nan, 'Unnamed: 4': nan, 'Unnamed: 5': nan, 'Unnamed: 6': nan, 'Unnamed: 7': nan, 'Unnamed: 8': nan, 'Unnamed: 9': nan}
+
+--- HOURS AND CYCLES ---
+Columns:
+['Unnamed: 0', 'Unnamed: 1', 'HOURS AND CYCLES', 'Unnamed: 3', 'Unnamed: 4', 'MAINTENANCE\nPLANNING', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8', 'Unnamed: 9']
+Sample 0:
+{'Unnamed: 0': nan, 'Unnamed: 1': nan, 'HOURS AND CYCLES': nan, 'Unnamed: 3': nan, 'Unnamed: 4': nan, 'MAINTENANCE\nPLANNING': nan, 'Unnamed: 6': nan, 'Unnamed: 7': nan, 'Unnamed: 8': nan, 'Unnamed: 9': nan}
+Sample 1:
+{'Unnamed: 0': nan, 'Unnamed: 1': nan, 'HOURS AND CYCLES': nan, 'Unnamed: 3': nan, 'Unnamed: 4': nan, 'MAINTENANCE\nPLANNING': nan, 'Unnamed: 6': nan, 'Unnamed: 7': nan, 'Unnamed: 8': nan, 'Unnamed: 9': nan}
+
+--- B008-RSA OCCM ---
+Columns:
+['PU FH', 'A/C FH', '53173.76666666675', 'A/C FC', '28081', 'ENG1 FH', '1870.5277777777794', 'ENG1 FC', '19965', 'ENG2 FH', '1843.194444444444', 'ENG2 FC', '22379', 'APU FH', 'Unnamed: 14', 'Unnamed: 15', 'Unnamed: 16', 'Unnamed: 17', 'Unnamed: 18', 'Unnamed: 19', 'Unnamed: 20', 'Unnamed: 21', 'Unnamed: 22', '16680.2', 'APU FC', '32985']
+Sample 0:
+{'PU FH': '21', 'A/C FH': 'Desc.', '53173.76666666675': 'REF', 'A/C FC': 'P/N OFF', '28081': 'S/N OFF', 'ENG1 FH': 'P/N ON', '1870.5277777777794': 'S/N ON', 'ENG1 FC': 'DATE', '19965': 'TLB', 'ENG2 FH': 'FH', '1843.194444444444': 'A/C FC', 'ENG2 FC': 'STATUS', '22379': 'TOTAL FH', 'APU FH': 'TOTAL FC', 'Unnamed: 14': 'ENG1 S/N', 'Unnamed: 15': 'ENG1 FH', 'Unnamed: 16': 'ENG1 FC', 'Unnamed: 17': 'ENG2 S/N', 'Unnamed: 18': 'ENG2 FH', 'Unnamed: 19': 'ENG2 FC', 'Unnamed: 20': 'APU S/N', 'Unnamed: 21': 'APU FH', 'Unnamed: 22': 'APU FC', '16680.2': 'CRS&TLB', 'APU FC': 'NOTES', '32985': nan}
+Sample 1:
+{'PU FH': nan, 'A/C FH': 'RAM AIR INLET ACTUATOR', '53173.76666666675': '21-51-21', 'A/C FC': '541674-4', '28081': '48-7521', 'ENG1 FH': '541674-4', '1870.5277777777794': '54-2711', 'ENG1 FC': '45208', '19965': '465', 'ENG2 FH': nan, '1843.194444444444': nan, 'ENG2 FC': nan, '22379': ' ', 'APU FH': ' ', 'Unnamed: 14': nan, 'Unnamed: 15': nan, 'Unnamed: 16': nan, 'Unnamed: 17': nan, 'Unnamed: 18': nan, 'Unnamed: 19': nan, 'Unnamed: 20': nan, 'Unnamed: 21': nan, 'Unnamed: 22': nan, '16680.2': 'ATTACH', 'APU FC': nan, '32985': nan}
+
+--- MAIN mpd 6-2025 ---
+Columns:
+['MPD\nITEM\nNUMBER', 'INTERVAL', 'Unnamed: 2', 'ZONE', 'ACCESS', 'APPLICABILITY', 'Unnamed: 6', 'MAN-HOURS', 'TASK DESCRIPTION', 'CMP', 'SOURCE', 'TASK CARD', 'RELATED TASK', 'MAT', 'TOOL', 'NOTES', 'REV', 'Unnamed: 17', 'Unnamed: 18', 'Unnamed: 19']
+Sample 0:
+{'MPD\nITEM\nNUMBER': nan, 'INTERVAL': 'THRES.', 'Unnamed: 2': 'REPEAT', 'ZONE': nan, 'ACCESS': nan, 'APPLICABILITY': 'APL', 'Unnamed: 6': 'ENG', 'MAN-HOURS': nan, 'TASK DESCRIPTION': nan, 'CMP': nan, 'SOURCE': nan, 'TASK CARD': nan, 'RELATED TASK': nan, 'MAT': nan, 'TOOL': nan, 'NOTES': nan, 'REV': nan, 'Unnamed: 17': nan, 'Unnamed: 18': nan, 'Unnamed: 19': nan}
+Sample 1:
+{'MPD\nITEM\nNUMBER': nan, 'INTERVAL': nan, 'Unnamed: 2': nan, 'ZONE': nan, 'ACCESS': nan, 'APPLICABILITY': nan, 'Unnamed: 6': nan, 'MAN-HOURS': nan, 'TASK DESCRIPTION': nan, 'CMP': nan, 'SOURCE': nan, 'TASK CARD': nan, 'RELATED TASK': nan, 'MAT': nan, 'TOOL': nan, 'NOTES': nan, 'REV': nan, 'Unnamed: 17': nan, 'Unnamed: 18': nan, 'Unnamed: 19': nan}
+
