@@ -10,7 +10,7 @@ from google import genai
 
 load_dotenv()
 
-app = Flask(__name__, static_folder=os.path.abspath(os.path.dirname(__name__)), static_url_path='/static')
+app = Flask(__name__, static_folder=os.path.abspath(os.path.dirname(__file__)), static_url_path='/static')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'camo-tracker-secret')
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'uploads')
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -721,15 +721,7 @@ def download_pdf(pdf_id):
 # ═══════════════════════════════════════════════════════════════
 # SETTINGS
 # ═══════════════════════════════════════════════════════════════
-@app.route('/save_gemini_key', methods=['POST'])
-@login_required
-def save_gemini_key():
-    key  = request.form.get('gemini_key','').strip()
-    tail = request.form.get('tail','')
-    if key:
-        set_key('.env', 'GEMINI_API_KEY', key)
-        load_dotenv(override=True)
-    return redirect(url_for('index', tail=tail, msg='Gemini API Key saved.'))
+# Gemini API Key route removed - Native parsing enabled
 
 @app.route('/api/auto_link_pdfs', methods=['POST'])
 @login_required
@@ -947,15 +939,6 @@ body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;}
            <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded shadow-lg transition transform hover:scale-[1.01] active:scale-100">
              <i class="fas fa-link mr-2"></i>Run Smart PDF Linker
            </button>
-        </form>
-      </div>
-      <!-- Gemini Key -->
-      <div class="bg-white p-6 rounded-lg shadow lg:col-span-2">
-        <form action="/save_gemini_key" method="POST" class="flex gap-3 items-end">
-          <input type="hidden" name="tail" value="{{ aircraft.tail_number }}">
-          <div class="flex-1 text-left"><label class="text-xs font-semibold text-gray-600 block mb-1"><i class="fas fa-robot text-purple-600 mr-1"></i>Gemini AI API Key</label>
-          <input name="gemini_key" type="password" placeholder="Paste your API key here..." class="w-full border rounded px-3 py-2 text-sm shadow-sm"></div>
-          <button type="submit" class="bg-gray-800 hover:bg-black text-white font-bold py-2 px-6 rounded whitespace-nowrap transition">Save Key</button>
         </form>
       </div>
     </div>
