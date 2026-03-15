@@ -10,7 +10,7 @@ from google import genai
 
 load_dotenv()
 
-app = Flask(__name__, static_folder=os.path.abspath(os.path.dirname(__file__)), static_url_path='/static')
+app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), 'static')), static_url_path='/static')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'camo-tracker-secret')
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'uploads')
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -779,55 +779,69 @@ MAIN_TEMPLATE = """<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;}
-.status-Overdue{background:#fee2e2;border-left:4px solid #ef4444;color:#991b1b;}
-.status-Warning{background:#fef9c3;border-left:4px solid #f59e0b;color:#92400e;}
-.status-Normal{background:#eff6ff;border-left:4px solid #3b82f6;color:#1e3a5f;}
-.tab-content{display:none;}.tab-content.active{display:block;}
-#pdf-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);}
+body{font-family:'Inter', 'Segoe UI', sans-serif; background:#f8fafc; color:#1e293b;}
+.glass{background:rgba(255,255,255,0.8); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.3);}
+.status-Overdue{background:#fff1f2; border-left:4px solid #e11d48; color:#9f1239;}
+.status-Warning{background:#fffbeb; border-left:4px solid #d97706; color:#92400e;}
+.status-Normal{background:#f0f9ff; border-left:4px solid #0284c7; color:#0c4a6e;}
+.tab-content{display:none;} .tab-content.active{display:block;}
+#pdf-modal{display:none; position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.8); backdrop-filter:blur(4px);}
+.premium-shadow{shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);}
 </style>
 </head>
-<body>
+<body class="antialiased">
 <!-- NAVBAR -->
-<nav class="bg-red-700 text-white px-6 py-3 flex items-center justify-between shadow-lg border-b border-red-800">
-  <div class="flex items-center gap-3">
-    <div class="bg-white p-1 rounded shadow-inner">
+<nav class="bg-red-700 text-white px-6 py-3 flex items-center justify-between shadow-xl border-b border-red-800 sticky top-0 z-50">
+  <div class="flex items-center gap-4">
+    <div class="bg-white p-1 rounded-lg shadow-inner ring-1 ring-black/5">
       <img src="/static/REDSEA Airlines Logo.png" class="h-10" onerror="this.parentElement.style.display='none'">
     </div>
-    <div>
-      <p class="font-bold text-xl tracking-tight uppercase">Camo-Tracker</p>
-      <p class="text-[10px] text-red-100 opacity-80 uppercase tracking-widest font-semibold">RED SEA Airlines · Maintenance Planning</p>
+    <div class="leading-tight">
+      <p class="font-black text-2xl tracking-tighter uppercase italic">Camo-Tracker</p>
+      <p class="text-[9px] text-red-100 opacity-90 uppercase tracking-[0.2em] font-bold">RED SEA Airlines · Planning System</p>
     </div>
   </div>
-  <div class="flex items-center gap-4">
+  <div class="flex items-center gap-6">
     <!-- Aircraft Selector -->
-    <div class="flex items-center bg-red-800 rounded px-3 py-1.5 border border-red-600 gap-2">
-      <i class="fas fa-plane text-xs text-red-300"></i>
-      <select onchange="location.href='/?tail='+this.value" class="bg-transparent text-white text-sm focus:outline-none cursor-pointer font-bold">
+    <div class="flex items-center bg-red-800/50 backdrop-blur-sm rounded-full px-4 py-1.5 border border-red-500/30 gap-3 hover:bg-red-800 transition shadow-inner">
+      <i class="fas fa-plane-up text-red-300 text-xs"></i>
+      <select onchange="location.href='/?tail='+this.value" class="bg-transparent text-white text-sm focus:outline-none cursor-pointer font-bold appearance-none pr-4">
         {% for ac in all_aircraft %}
-        <option value="{{ ac.tail_number }}" class="bg-gray-800" {% if ac.tail_number==aircraft.tail_number %}selected{% endif %}>{{ ac.tail_number }}</option>
+        <option value="{{ ac.tail_number }}" class="bg-gray-900 text-white" {% if ac.tail_number==aircraft.tail_number %}selected{% endif %}>{{ ac.tail_number }}</option>
         {% endfor %}
       </select>
     </div>
-    <span class="text-xs text-gray-400 hidden md:block"><i class="fas fa-user mr-1"></i>{{ user_email }}</span>
-    <a href="/logout" class="bg-red-600 hover:bg-red-700 text-xs px-3 py-1.5 rounded transition"><i class="fas fa-sign-out-alt mr-1"></i>Logout</a>
+    <div class="flex items-center gap-3">
+        <div class="hidden md:flex flex-col items-end leading-none">
+            <span class="text-[10px] uppercase font-black text-red-200 opacity-60">Session User</span>
+            <span class="text-xs font-bold text-white">{{ user_email }}</span>
+        </div>
+        <a href="/logout" class="bg-white/10 hover:bg-white/20 text-white text-xs px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 border border-white/20">
+            <i class="fas fa-power-off text-[10px]"></i> Exit
+        </a>
+    </div>
   </div>
 </nav>
 
 {% if msg %}
-<div id="msg-bar" class="{% if 'Error' in msg or 'Warning' in msg or 'error' in msg %}bg-amber-50 border-amber-400 text-amber-800{% else %}bg-green-50 border-green-400 text-green-800{% endif %} border-l-4 px-6 py-3 text-sm flex justify-between items-center">
-  <span><i class="fas fa-info-circle mr-2"></i>{{ msg }}</span>
-  <button onclick="document.getElementById('msg-bar').remove()" class="ml-4 font-bold">×</button>
+<div id="msg-bar" class="max-w-screen-2xl mx-auto mt-4 px-4 slide-in-top">
+    <div class="{% if 'Error' in msg or 'Warning' in msg or 'error' in msg %}bg-amber-50 border-amber-400 text-amber-800{% else %}bg-blue-50 border-blue-400 text-blue-800{% endif %} border-l-4 rounded-r-lg shadow-sm px-6 py-4 text-sm flex justify-between items-center glass">
+      <div class="flex items-center gap-3">
+        <i class="fas {% if 'Error' in msg %}fa-triangle-exclamation{% else %}fa-circle-info{% endif %} text-lg"></i>
+        <span class="font-medium">{{ msg }}</span>
+      </div>
+      <button onclick="document.getElementById('msg-bar').remove()" class="text-xl opacity-50 hover:opacity-100 transition">×</button>
+    </div>
 </div>
 {% endif %}
 
 <!-- MAIN TABS -->
-<div class="max-w-screen-2xl mx-auto px-4 py-4">
+<div class="max-w-screen-2xl mx-auto px-4 py-6">
   <!-- Tab Buttons -->
-  <div class="flex gap-2 mb-4 flex-wrap">
-    {% for tab,icon,label in [('tasks','fa-tasks','Tasks Log'),('calendar','fa-calendar-alt','Calendar'),('data','fa-database','Data Management')] %}
-    <button onclick="switchTab('{{tab}}')" id="btn-{{tab}}" class="tab-switch px-4 py-2 rounded text-sm font-semibold border-2 transition {% if loop.first %}bg-red-600 text-white border-red-600{% else %}bg-white text-gray-600 border-gray-200 hover:border-red-400{% endif %}">
-      <i class="fas {{icon}} mr-1"></i>{{label}}
+  <div class="flex gap-1 mb-8 bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-300/30">
+    {% for tab,icon,label in [('tasks','fa-list-check','Maintenance Tasks'),('calendar','fa-calendar-days','Schedule View'),('data','fa-database','Database Engine')] %}
+    <button onclick="switchTab('{{tab}}')" id="btn-{{tab}}" class="tab-switch px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 {% if loop.first %}bg-white text-red-700 shadow-sm{% else %}text-gray-500 hover:text-gray-700 hover:bg-white/50{% endif %}">
+      <i class="fas {{icon}}"></i>{{label}}
     </button>
     {% endfor %}
   </div>
@@ -835,22 +849,28 @@ body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;}
   <!-- TASKS TAB -->
   <div id="tab-tasks" class="tab-content active">
     <!-- Fleet Overview (New Section) -->
-    <div class="mb-6 overflow-hidden">
-      <h3 class="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider flex items-center gap-2">
-        <i class="fas fa-layer-group text-red-600"></i> Fleet Status Overview
+    <div class="mb-10">
+      <h3 class="text-[11px] font-black text-gray-400 mb-4 uppercase tracking-[0.2em] flex items-center gap-2">
+        <i class="fas fa-layer-group text-red-600"></i> Operational Fleet Overview
       </h3>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
         {% for ac in all_aircraft %}
-        <a href="/?tail={{ ac.tail_number }}" class="bg-white rounded-xl shadow-sm border p-4 transition hover:shadow-md hover:border-red-300 group {% if ac.tail_number==aircraft.tail_number %}border-red-500 ring-2 ring-red-100{% else %}border-gray-100{% endif %}">
-          <div class="flex justify-between items-start mb-2">
-            <span class="font-black text-lg {% if ac.tail_number==aircraft.tail_number %}text-red-700{% else %}text-gray-800{% endif %}">{{ ac.tail_number }}</span>
-            <i class="fas fa-chevron-right text-[10px] text-gray-300 group-hover:text-red-400 transition"></i>
+        <a href="/?tail={{ ac.tail_number }}" class="group relative overflow-hidden bg-white rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border {% if ac.tail_number==aircraft.tail_number %}border-red-500 shadow-lg shadow-red-500/10 ring-1 ring-red-500{% else %}border-slate-200 shadow-sm{% endif %}">
+          <div class="flex justify-between items-center mb-4">
+            <span class="font-black text-2xl tracking-tighter {% if ac.tail_number==aircraft.tail_number %}text-red-700{% else %}text-slate-800{% endif %}">{{ ac.tail_number }}</span>
+            <div class="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-red-50 transition">
+                <i class="fas fa-plane text-slate-300 group-hover:text-red-500 transition text-sm"></i>
+            </div>
           </div>
-          <div class="space-y-1">
-            <div class="flex justify-between text-[10px] uppercase font-bold text-gray-400"><span>Hours</span><span class="text-gray-700">{{ ac.current_fh }}</span></div>
-            <div class="w-full bg-gray-100 h-1 rounded-full overflow-hidden"><div class="bg-blue-500 h-full" style="width: 65%"></div></div>
-            <div class="flex justify-between text-[10px] uppercase font-bold text-gray-400 mt-2"><span>Cycles</span><span class="text-gray-700">{{ ac.current_fc }}</span></div>
-            <div class="w-full bg-gray-100 h-1 rounded-full overflow-hidden"><div class="bg-teal-500 h-full" style="width: 45%"></div></div>
+          <div class="space-y-3">
+            <div>
+                <div class="flex justify-between text-[10px] font-black text-slate-400 uppercase mb-1"><span>Aircraft Hours</span><span class="text-slate-700">{{ ac.current_fh|round(1) }} FH</span></div>
+                <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shadow-inner"><div class="bg-gradient-to-r from-blue-500 to-indigo-600 h-full" style="width: 75%"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between text-[10px] font-black text-slate-400 uppercase mb-1"><span>Aircraft Cycles</span><span class="text-slate-700">{{ ac.current_fc }} FC</span></div>
+                <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shadow-inner"><div class="bg-gradient-to-r from-emerald-500 to-teal-600 h-full" style="width: 60%"></div></div>
+            </div>
           </div>
         </a>
         {% endfor %}
