@@ -45,11 +45,23 @@ def current_user_email():
     return session.get('user', {}).get('email', 'system')
 
 def db():
-    """Shortcut to the admin Supabase client."""
+    """Shortcut to the admin Supabase client with safety check."""
     if not SUPABASE_READY or supa_admin is None:
-        # In a real app we might return a mock or show a specific error page
-        # For this desktop-like app, we want it to be loud if env is missing
-        return None
+        print("❌ Supabase DB access attempted but not ready.")
+        class Silencer:
+            def table(self, *a, **k): return self
+            def select(self, *a, **k): return self
+            def insert(self, *a, **k): return self
+            def update(self, *a, **k): return self
+            def delete(self, *a, **k): return self
+            def eq(self, *a, **k): return self
+            def order(self, *a, **k): return self
+            def limit(self, *a, **k): return self
+            def maybe_single(self, *a, **k): return self
+            def execute(self, *a, **k):
+                class Res: data = None; error = "DB Not Connected"
+                return Res()
+        return Silencer()
     return supa_admin
 
 # ── Universal Excel Opener (unchanged logic) ─────────────────────────────────
@@ -577,11 +589,15 @@ def upload_excel():
                         # Map columns
                         for i, val in enumerate(df.iloc[r]):
                             v = str(val).upper()
-                            if any(k in v for k in ["TASK NO", "TASK ID", "M.P. REF", "MPD NO", "TASK NUMBER"]): col_map['task_id'] = i
+                            if any(k in v for k in ["TASK NO", "TASK ID", "M.P. REF", "MPD NO", "TASK NUMBER", "TCM TASK"]): col_map['task_id'] = i
                             elif "DESC" in v or "NOMENCLATURE" in v: col_map['description'] = i
                             elif ("FH" in v or "HOURS" in v) and "INTERVAL" in v: col_map['interval_fh'] = i
                             elif ("FC" in v or "CYCLES" in v) and "INTERVAL" in v: col_map['interval_fc'] = i
                             elif ("DY" in v or "DAYS" in v) and "INTERVAL" in v: col_map['interval_dy'] = i
+                            elif "LAST DONE" in v and i not in col_map.values():
+                                col_map['last_done_date'] = i
+                                col_map['last_done_fh'] = i + 1
+                                col_map['last_done_fc'] = i + 2
                             elif "DATE" in v and "DONE" in v: col_map['last_done_date'] = i
                             elif "FH" in v and "DONE" in v: col_map['last_done_fh'] = i
                             elif "FC" in v and "DONE" in v: col_map['last_done_fc'] = i
