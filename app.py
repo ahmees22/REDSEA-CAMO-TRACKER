@@ -6,11 +6,11 @@ from flask import (Flask, render_template_string, request, jsonify,
                    send_file, redirect, url_for, session)
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv, set_key
-#from google import genai
+from google import genai
 
 load_dotenv()
 
-app = Flask(__name__, static_folder=os.path.abspath(os.path.dirname(__name__)), static_url_path='/static')
+app = Flask(__name__, static_folder=os.path.abspath(os.path.dirname(__file__)), static_url_path='/static')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'camo-tracker-secret')
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'uploads')
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -35,8 +35,9 @@ except Exception as e:
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Bypass login logic entirely: auto-inject a standard user session if empty
         if 'user' not in session:
-            return redirect(url_for('login'))
+            session['user'] = {'email': 'admin@redsea.com', 'id': 'system'}
         return f(*args, **kwargs)
     return decorated
 
@@ -44,7 +45,23 @@ def current_user_email():
     return session.get('user', {}).get('email', 'system')
 
 def db():
-    """Shortcut to the admin Supabase client."""
+    """Shortcut to the admin Supabase client with safety check."""
+    if not SUPABASE_READY or supa_admin is None:
+        print("❌ Supabase DB access attempted but not ready.")
+        class Silencer:
+            def table(self, *a, **k): return self
+            def select(self, *a, **k): return self
+            def insert(self, *a, **k): return self
+            def update(self, *a, **k): return self
+            def delete(self, *a, **k): return self
+            def eq(self, *a, **k): return self
+            def order(self, *a, **k): return self
+            def limit(self, *a, **k): return self
+            def maybe_single(self, *a, **k): return self
+            def execute(self, *a, **k):
+                class Res: data = None; error = "DB Not Connected"
+                return Res()
+        return Silencer()
     return supa_admin
 
 # ── Universal Excel Opener (unchanged logic) ─────────────────────────────────
@@ -324,62 +341,19 @@ function switchTab(t){
 # ═══════════════════════════════════════════════════════════════
 @app.route('/login', methods=['GET','POST'])
 def login():
-    if 'user' in session:
-        return redirect(url_for('index'))
-    if request.method == 'POST':
-        email    = request.form.get('email','').strip()
-        password = request.form.get('password','').strip()
-        try:
-            res = supa_anon.auth.sign_in_with_password({"email": email, "password": password})
-            session['user'] = {'email': res.user.email, 'id': str(res.user.id)}
-            session['access_token'] = res.session.access_token
-            return redirect(url_for('index'))
-        except Exception as e:
-            # If email is unconfirmed, try to auto-confirm it using admin client
-            err_str = str(e).lower()
-            if "confirm" in err_str or "verify" in err_str:
-                try:
-                    user_list = supa_admin.auth.admin.list_users()
-                    target = next((u for u in user_list if u.email == email), None)
-                    if target:
-                        supa_admin.auth.admin.update_user_by_id(target.id, {"email_confirm": True})
-                        # Retry
-                        res = supa_anon.auth.sign_in_with_password({"email": email, "password": password})
-                        session['user'] = {'email': res.user.email, 'id': str(res.user.id)}
-                        session['access_token'] = res.session.access_token
-                        return redirect(url_for('index', msg='Account auto-confirmed and logged in!'))
-                except: pass
-            
-            return render_template_string(LOGIN_TEMPLATE, mode='login',
-                error=f"Login Error: {str(e)}", success=None, year=datetime.date.today().year)
-    return render_template_string(LOGIN_TEMPLATE, mode='login', error=None, success=None, year=datetime.date.today().year)
+    # Login system is completely bypassed
+    if 'user' not in session:
+        session['user'] = {'email': 'admin@redsea.com', 'id': 'system'}
+    return redirect(url_for('index'))
 
 @app.route('/register', methods=['POST'])
 def register():
-    email    = request.form.get('email','').strip()
-    password = request.form.get('password','').strip()
-    try:
-        # Use admin client to create a user that is already confirmed
-        supa_admin.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True
-        })
-        # Log in immediately after registration
-        res = supa_anon.auth.sign_in_with_password({"email": email, "password": password})
-        session['user'] = {'email': res.user.email, 'id': str(res.user.id)}
-        session['access_token'] = res.session.access_token
-        return redirect(url_for('index', msg='Registration successful! welcome to Camo-Tracker.'))
-    except Exception as e:
-        return render_template_string(LOGIN_TEMPLATE, mode='login',
-            error=f"Registration Error: {str(e)}", success=None, year=datetime.date.today().year)
+    return redirect(url_for('index'))
 
 @app.route('/logout')
 def logout():
-    try: supa_anon.auth.sign_out()
-    except: pass
     session.clear()
-    return redirect(url_for('login'))
+    return redirect(url_for('index'))
 
 @app.route('/forgot-password', methods=['GET','POST'])
 def forgot_password():
@@ -430,16 +404,51 @@ def index():
     tail = request.args.get('tail','')
     aircraft_res = db().table('aircraft').select('*').execute()
     all_aircraft = aircraft_res.data or []
+    
+    # Self-healing: Seed default aircraft if DB is empty
     if not all_aircraft:
-        return render_template_string(LOGIN_TEMPLATE, mode='login', error='No aircraft in DB. Run schema SQL first.', success=None, year=datetime.date.today().year)
+        try:
+            # Insert only the tail number to avoid PGRST204 errors if other columns don't exist yet
+            defaults = [
+                {'tail_number': 'SU-RSA'},
+                {'tail_number': 'SU-RSB'},
+                {'tail_number': 'SU-RSC'},
+                {'tail_number': 'SU-RSD'}
+            ]
+            db().table('aircraft').insert(defaults).execute()
+        except Exception:
+            # If this also fails, return a clear error requiring manual SQL run
+            return render_template_string(LOGIN_TEMPLATE, mode='login', 
+                error=f'Database Error: Please run the SQL migration in Supabase to add current_fc and current_fh.', success=None, year=datetime.date.today().year)
+        
+        # Reload aircraft
+        try:
+            all_aircraft = db().table('aircraft').select('*').execute().data or []
+        except Exception:
+            all_aircraft = []
+
+    if not all_aircraft:
+        return render_template_string(LOGIN_TEMPLATE, mode='login', 
+            error=f'Critical Error: Could not load or seed aircraft. Please check Supabase table schema.', success=None, year=datetime.date.today().year)
+
     aircraft = next((a for a in all_aircraft if a['tail_number']==tail), all_aircraft[0])
+    
+    # Safely handle missing columns dynamically when forecasting
+    aircraft['current_fh'] = aircraft.get('current_fh', 0.0)
+    aircraft['current_fc'] = aircraft.get('current_fc', 0)
+    aircraft['util_fh_rate'] = aircraft.get('util_fh_rate', 8.0)
+    aircraft['util_fc_rate'] = aircraft.get('util_fc_rate', 4.0)
+
     forecasts = forecast_tasks(aircraft)
     user_email = current_user_email()
     supa_url = os.getenv('SUPABASE_URL','')
     supa_key = os.getenv('SUPABASE_KEY','')
+    overdue = sum(1 for f in forecasts if f['status'] == 'Overdue')
+    warning = sum(1 for f in forecasts if f['status'] == 'Warning')
     return render_template_string(MAIN_TEMPLATE,
         aircraft=aircraft, all_aircraft=all_aircraft, forecasts=forecasts,
-        msg=msg, user_email=user_email, supa_url=supa_url, supa_key=supa_key)
+        msg=msg, user_email=user_email, supa_url=supa_url, supa_key=supa_key,
+        overdue=overdue, warning=warning)
 
 # ═══════════════════════════════════════════════════════════════
 # API: Calendar / Search / Logs
@@ -553,10 +562,7 @@ def upload_excel():
             # Delete old tasks
             db().table('engine_tasks').delete().eq('aircraft_id', target['id']).execute()
 
-            gemini_key = os.getenv('GEMINI_API_KEY','')
-            if not gemini_key:
-                error_msgs.append("Gemini API Key missing!"); continue
-
+            # Native Heuristic Parser (No Gemini AI)
             for sheet in sheet_names:
                 try:
                     if isinstance(xls, _CsvFakeExcel):
@@ -564,37 +570,73 @@ def upload_excel():
                     else:
                         df = pd.read_excel(file_path, sheet_name=sheet, header=None, engine=read_engine)
                 except Exception as se:
+                    error_msgs.append(f"Error reading sheet {sheet}: {str(se)}")
                     continue
-                if df.empty or len(df) < 3: continue
+                if df.empty or len(df) < 2: continue
 
-                csv_snip = df.head(15).to_csv(index=False)
-                prompt = f"""You are a Senior Aviation CAMO Engineer. Parse this Excel/CSV sheet.
-Output ONLY valid JSON:
-{{"is_task_list":true,"header_row_index":4,"aircraft_status":{{"current_fh":12500,"current_fc":8000,"report_date":"2024-03-10"}},"columns":{{"task_id":0,"description":1,"interval_fh":8,"interval_fc":9,"interval_dy":10,"last_done_date":12,"last_done_fh":13,"last_done_fc":14}}}}
-If not a task sheet return: {{"is_task_list":false}}
-CSV:
-{csv_snip}"""
-                try:
-                    client = genai.Client(api_key=gemini_key)
-                    raw    = client.models.generate_content(model='gemini-2.0-flash', contents=prompt).text.strip()
-                    s,e    = raw.find('{'), raw.rfind('}')
-                    res    = json.loads(raw[s:e+1]) if s!=-1 else {}
-                except: continue
+                # 1. Heuristic Header Search
+                header_idx = 0
+                col_map = {}
+                found_task = False
+                
+                # Scan first 20 rows for header
+                for r in range(min(20, len(df))):
+                    row_vals = [str(x).upper() for x in df.iloc[r] if pd.notna(x)]
+                    # Keywords for Task ID
+                    if any(k in v for v in row_vals for k in ["TASK NO", "TASK ID", "M.P. REF", "MPD NO", "TASK NUMBER"]):
+                        header_idx = r
+                        found_task = True
+                        # Map columns
+                        for i, val in enumerate(df.iloc[r]):
+                            v = str(val).upper()
+                            if any(k in v for k in ["TASK NO", "TASK ID", "M.P. REF", "MPD NO", "TASK NUMBER", "TCM TASK"]): col_map['task_id'] = i
+                            elif "DESC" in v or "NOMENCLATURE" in v: col_map['description'] = i
+                            elif ("FH" in v or "HOURS" in v) and "INTERVAL" in v: col_map['interval_fh'] = i
+                            elif ("FC" in v or "CYCLES" in v) and "INTERVAL" in v: col_map['interval_fc'] = i
+                            elif ("DY" in v or "DAYS" in v) and "INTERVAL" in v: col_map['interval_dy'] = i
+                            elif "LAST DONE" in v and i not in col_map.values():
+                                col_map['last_done_date'] = i
+                                col_map['last_done_fh'] = i + 1
+                                col_map['last_done_fc'] = i + 2
+                            elif "DATE" in v and "DONE" in v: col_map['last_done_date'] = i
+                            elif "FH" in v and "DONE" in v: col_map['last_done_fh'] = i
+                            elif "FC" in v and "DONE" in v: col_map['last_done_fc'] = i
+                            elif "ZONE" in v: col_map['zone'] = i
+                            elif "ACCESS" in v: col_map['access'] = i
+                        break
 
-                if not res.get('is_task_list'): continue
-                col_map    = res.get('columns', {})
-                header_idx = int(res.get('header_row_index', 0))
-                ai_status  = res.get('aircraft_status', {})
-                pkg        = sheet.replace('TASK LIST','').strip() or 'GENERAL'
+                if not found_task:
+                    error_msgs.append(f"Sheet '{sheet}' skipped: Could not find header row with 'Task ID' keywords.")
+                    continue
+
+                # 2. Extract Aircraft Status (optional) from top rows
+                ai_status = {}
+                for r in range(min(header_idx, len(df))):
+                    for i, val in enumerate(df.iloc[r]):
+                        v = str(val).upper()
+                        if "TOTAL" in v and ("FH" in v or "HOURS" in v):
+                            try:
+                                # Look for number in next cell
+                                next_val = df.iloc[r, i+1]
+                                if pd.notna(next_val): ai_status['current_fh'] = float(re.sub(r'[^\d\.]','', str(next_val)))
+                            except: pass
+                        if "TOTAL" in v and ("FC" in v or "CYCLES" in v):
+                            try:
+                                next_val = df.iloc[r, i+1]
+                                if pd.notna(next_val): ai_status['current_fc'] = int(float(re.sub(r'[^\d\.]','', str(next_val))))
+                            except: pass
 
                 if ai_status:
                     upd = {'last_updated_by': current_user_email()}
-                    if ai_status.get('current_fh'): upd['current_fh'] = float(ai_status['current_fh'])
-                    if ai_status.get('current_fc'): upd['current_fc'] = int(ai_status['current_fc'])
+                    if ai_status.get('current_fh'): upd['current_fh'] = ai_status['current_fh']
+                    if ai_status.get('current_fc'): upd['current_fc'] = ai_status['current_fc']
                     db().table('aircraft').update(upd).eq('id', target['id']).execute()
 
-                if 'task_id' not in col_map: continue
-                df_data = df.iloc[header_idx+1:].dropna(how='all')
+                # 3. Process Task Rows
+                pkg = sheet.replace('TASK LIST','').strip() or 'GENERAL'
+                try:
+                    df_data = df.iloc[header_idx+1:].dropna(how='all')
+                except: continue
 
                 batch = []
                 for _, row in df_data.iterrows():
@@ -608,27 +650,14 @@ CSV:
                         return None
 
                     tid = gv('task_id')
-                    if not tid: continue
+                    if not tid or str(tid).strip() == "": continue
 
-                    # Parse interval
-                    fh,fc,dy = None,None,None
-                    if gv('interval_fh'):
-                        try: fh = float(gv('interval_fh'))
-                        except: pass
-                    if gv('interval_fc'):
-                        try: fc = int(float(gv('interval_fc')))
-                        except: pass
-                    if gv('interval_dy'):
-                        try: dy = int(float(gv('interval_dy')))
-                        except: pass
-                    # Unified interval string fallback
-                    istr = str(gv('interval') or '')
-                    if istr and not fh:
-                        m = re.search(r'([\d,\.]+)\s*FH', istr, re.I)
-                        if m: fh = float(m.group(1).replace(',',''))
-                    if istr and not fc:
-                        m = re.search(r'([\d,\.]+)\s*FC', istr, re.I)
-                        if m: fc = int(float(m.group(1).replace(',','')))
+                    fh, fc, dy = None, None, None
+                    try:
+                        if col_map.get('interval_fh') is not None: fh = float(re.sub(r'[^\d\.]','', str(gv('interval_fh') or '0')))
+                        if col_map.get('interval_fc') is not None: fc = int(float(re.sub(r'[^\d\.]','', str(gv('interval_fc') or '0'))))
+                        if col_map.get('interval_dy') is not None: dy = int(float(re.sub(r'[^\d\.]','', str(gv('interval_dy') or '0'))))
+                    except: pass
 
                     last_date = None
                     vd = gv('last_done_date')
@@ -643,22 +672,26 @@ CSV:
                         'description': f"[{pkg}] {str(gv('description') or 'N/A').strip()}",
                         'task_type': pkg, 'zone': str(gv('zone') or '')[:50] or None,
                         'access': str(gv('access') or '')[:50] or None,
-                        'applicability': str(gv('applicability') or '')[:50] or None,
-                        'man_hours': str(gv('man_hours') or '')[:20] or None,
-                        'task_card_ref': str(gv('task_card_ref') or '')[:50] or None,
-                        'material': str(gv('material') or '')[:200] or None,
-                        'tools': str(gv('tools') or '')[:200] or None,
-                        'notes': str(gv('notes') or '')[:500] or None,
-                        'interval_fh': fh, 'interval_fc': fc, 'interval_days': dy,
-                        'last_done_fh': float(gv('last_done_fh') or 0) if gv('last_done_fh') else 0.0,
-                        'last_done_fc': int(float(gv('last_done_fc') or 0)) if gv('last_done_fc') else 0,
+                        'interval_fh': fh if fh and fh > 0 else None,
+                        'interval_fc': fc if fc and fc > 0 else None,
+                        'interval_days': dy if dy and dy > 0 else None,
+                        'last_done_fh': float(re.sub(r'[^\d\.]','', str(gv('last_done_fh') or '0'))) if gv('last_done_fh') else 0.0,
+                        'last_done_fc': int(float(re.sub(r'[^\d\.]','', str(gv('last_done_fc') or '0')))) if gv('last_done_fc') else 0,
                         'last_done_date': last_date or datetime.datetime.utcnow().isoformat(),
                         'last_updated_by': current_user_email()
                     })
+
                     if len(batch) >= 100:
                         db().table('engine_tasks').insert(batch).execute(); batch=[]
+
                 if batch:
-                    db().table('engine_tasks').insert(batch).execute()
+                    try:
+                        db().table('engine_tasks').insert(batch).execute()
+                    except Exception as e:
+                        error_msgs.append(f"DB Insert Error on '{sheet}': {str(e)}")
+                
+                if not batch and not ai_status:
+                    error_msgs.append(f"Sheet '{sheet}' processed but no tasks found matching patterns.")
 
             processed.append(target['tail_number'])
             db().table('upload_logs').update({'status':'Success','file_size':f"{len(sheet_names)} sheets"}).eq('filename', file.filename).execute()
@@ -704,15 +737,33 @@ def download_pdf(pdf_id):
 # ═══════════════════════════════════════════════════════════════
 # SETTINGS
 # ═══════════════════════════════════════════════════════════════
-@app.route('/save_gemini_key', methods=['POST'])
+# Gemini API Key route removed - Native parsing enabled
+
+@app.route('/api/auto_link_pdfs', methods=['POST'])
 @login_required
-def save_gemini_key():
-    key  = request.form.get('gemini_key','').strip()
+def auto_link_pdfs():
+    """Scan the uploads folder and match PDFs to tasks based on filename."""
     tail = request.form.get('tail','')
-    if key:
-        set_key('.env', 'GEMINI_API_KEY', key)
-        load_dotenv(override=True)
-    return redirect(url_for('index', tail=tail, msg='Gemini API Key saved.'))
+    count = 0
+    try:
+        files = os.listdir(app.config['UPLOAD_FOLDER'])
+        for f in files:
+            if f.lower().endswith('.pdf'):
+                # Extract potential task ID (e.g., "78-11-01.pdf" -> "78-11-01")
+                tid = os.path.splitext(f)[0].strip()
+                # Check if this task exists in DB
+                task = db().table('engine_tasks').select('task_id').eq('task_id', tid).limit(1).execute().data
+                if task:
+                    fpath = os.path.join(app.config['UPLOAD_FOLDER'], f)
+                    db().table('task_card_pdfs').delete().eq('task_id_ref', tid).execute()
+                    db().table('task_card_pdfs').insert({
+                        'task_id_ref': tid, 'file_name': f, 'file_path': fpath,
+                        'last_updated_by': current_user_email()
+                    }).execute()
+                    count += 1
+        return redirect(url_for('index', tail=tail, msg=f'Smart Linker: {count} PDFs auto-linked to tasks.'))
+    except Exception as e:
+        return redirect(url_for('index', tail=tail, msg=f'Error in auto-linker: {str(e)}'))
 
 # ═══════════════════════════════════════════════════════════════
 # MAIN
@@ -738,18 +789,26 @@ body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;}
 </head>
 <body>
 <!-- NAVBAR -->
-<nav class="bg-gray-900 text-white px-6 py-3 flex items-center justify-between shadow-lg">
+<nav class="bg-red-700 text-white px-6 py-3 flex items-center justify-between shadow-lg border-b border-red-800">
   <div class="flex items-center gap-3">
-    <img src="/static/REDSEA Airlines Logo.png" class="h-10 rounded" onerror="this.style.display='none'">
-    <div><p class="font-bold text-lg leading-tight">Camo-Tracker</p><p class="text-xs text-gray-400">RED SEA Airlines · CAMO</p></div>
+    <div class="bg-white p-1 rounded shadow-inner">
+      <img src="/static/REDSEA Airlines Logo.png" class="h-10" onerror="this.parentElement.style.display='none'">
+    </div>
+    <div>
+      <p class="font-bold text-xl tracking-tight uppercase">Camo-Tracker</p>
+      <p class="text-[10px] text-red-100 opacity-80 uppercase tracking-widest font-semibold">RED SEA Airlines · Maintenance Planning</p>
+    </div>
   </div>
   <div class="flex items-center gap-4">
     <!-- Aircraft Selector -->
-    <select onchange="location.href='/?tail='+this.value" class="bg-gray-700 text-white text-sm rounded px-3 py-1.5 border border-gray-600">
-      {% for ac in all_aircraft %}
-      <option value="{{ ac.tail_number }}" {% if ac.tail_number==aircraft.tail_number %}selected{% endif %}>{{ ac.tail_number }}</option>
-      {% endfor %}
-    </select>
+    <div class="flex items-center bg-red-800 rounded px-3 py-1.5 border border-red-600 gap-2">
+      <i class="fas fa-plane text-xs text-red-300"></i>
+      <select onchange="location.href='/?tail='+this.value" class="bg-transparent text-white text-sm focus:outline-none cursor-pointer font-bold">
+        {% for ac in all_aircraft %}
+        <option value="{{ ac.tail_number }}" class="bg-gray-800" {% if ac.tail_number==aircraft.tail_number %}selected{% endif %}>{{ ac.tail_number }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <span class="text-xs text-gray-400 hidden md:block"><i class="fas fa-user mr-1"></i>{{ user_email }}</span>
     <a href="/logout" class="bg-red-600 hover:bg-red-700 text-xs px-3 py-1.5 rounded transition"><i class="fas fa-sign-out-alt mr-1"></i>Logout</a>
   </div>
@@ -775,39 +834,78 @@ body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;}
 
   <!-- TASKS TAB -->
   <div id="tab-tasks" class="tab-content active">
-    <!-- Status Bar -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-      {% set overdue=forecasts|selectattr('status','eq','Overdue')|list|length %}
-      {% set warning=forecasts|selectattr('status','eq','Warning')|list|length %}
-      <div class="bg-white rounded-lg p-4 shadow text-center"><p class="text-2xl font-bold text-gray-800">{{ forecasts|length }}</p><p class="text-xs text-gray-500 mt-1">Total Tasks</p></div>
-      <div class="bg-red-50 rounded-lg p-4 shadow text-center"><p class="text-2xl font-bold text-red-600">{{ overdue }}</p><p class="text-xs text-gray-500 mt-1">Overdue</p></div>
-      <div class="bg-yellow-50 rounded-lg p-4 shadow text-center"><p class="text-2xl font-bold text-yellow-600">{{ warning }}</p><p class="text-xs text-gray-500 mt-1">≤5 Days</p></div>
-      <div class="bg-blue-50 rounded-lg p-4 shadow text-center"><p class="text-2xl font-bold text-blue-600">{{ aircraft.current_fh|round(1) }}</p><p class="text-xs text-gray-500 mt-1">Current FH</p></div>
+    <!-- Fleet Overview (New Section) -->
+    <div class="mb-6 overflow-hidden">
+      <h3 class="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider flex items-center gap-2">
+        <i class="fas fa-layer-group text-red-600"></i> Fleet Status Overview
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {% for ac in all_aircraft %}
+        <a href="/?tail={{ ac.tail_number }}" class="bg-white rounded-xl shadow-sm border p-4 transition hover:shadow-md hover:border-red-300 group {% if ac.tail_number==aircraft.tail_number %}border-red-500 ring-2 ring-red-100{% else %}border-gray-100{% endif %}">
+          <div class="flex justify-between items-start mb-2">
+            <span class="font-black text-lg {% if ac.tail_number==aircraft.tail_number %}text-red-700{% else %}text-gray-800{% endif %}">{{ ac.tail_number }}</span>
+            <i class="fas fa-chevron-right text-[10px] text-gray-300 group-hover:text-red-400 transition"></i>
+          </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] uppercase font-bold text-gray-400"><span>Hours</span><span class="text-gray-700">{{ ac.current_fh }}</span></div>
+            <div class="w-full bg-gray-100 h-1 rounded-full overflow-hidden"><div class="bg-blue-500 h-full" style="width: 65%"></div></div>
+            <div class="flex justify-between text-[10px] uppercase font-bold text-gray-400 mt-2"><span>Cycles</span><span class="text-gray-700">{{ ac.current_fc }}</span></div>
+            <div class="w-full bg-gray-100 h-1 rounded-full overflow-hidden"><div class="bg-teal-500 h-full" style="width: 45%"></div></div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
     </div>
+
+    <!-- Active Aircraft Stats -->
+    <div class="flex items-center justify-between mb-3">
+       <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+         <i class="fas fa-info-circle text-blue-600"></i> {{ aircraft.tail_number }} Planning Data
+       </h3>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center"><p class="text-3xl font-black text-gray-900">{{ forecasts|length }}</p><p class="text-[10px] font-bold text-gray-400 uppercase mt-1 tracking-widest">Planned Tasks</p></div>
+      <div class="bg-red-50 rounded-xl p-5 shadow-sm border border-red-100 text-center"><p class="text-3xl font-black text-red-600">{{ overdue }}</p><p class="text-[10px] font-bold text-red-400 uppercase mt-1 tracking-widest">Overdue</p></div>
+      <div class="bg-amber-50 rounded-xl p-5 shadow-sm border border-amber-100 text-center"><p class="text-3xl font-black text-amber-600">{{ warning }}</p><p class="text-[10px] font-bold text-amber-500 uppercase mt-1 tracking-widest">Near Due</p></div>
+      <div class="bg-blue-50 rounded-xl p-5 shadow-sm border border-blue-100 text-center"><p class="text-3xl font-black text-blue-700">{{ aircraft.current_fh|round(1) }}</p><p class="text-[10px] font-bold text-blue-400 uppercase mt-1 tracking-widest">Total FH</p></div>
+    </div>
+
     <!-- Task Table -->
-    <div class="bg-white rounded-lg shadow overflow-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <table class="min-w-full text-xs">
-        <thead class="bg-gray-800 text-white sticky top-0">
+        <thead class="bg-gray-50 text-gray-500 uppercase font-black tracking-wider border-b">
           <tr>
-            {% for h in ['Task ID','Description','Package','Due Date','Status','FH Interval','FC Interval','Days Interval','Zone','Access','Man-Hrs','PDF'] %}
-            <th class="px-3 py-2 text-left font-semibold">{{h}}</th>{% endfor %}
+            <th class="px-4 py-3 text-left">Task ID</th>
+            <th class="px-4 py-3 text-left">Description</th>
+            <th class="px-4 py-3 text-left">Package</th>
+            <th class="px-4 py-3 text-left">Due Date</th>
+            <th class="px-4 py-3 text-left">Status</th>
+            <th class="px-4 py-3 text-left">Action</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="divide-y divide-gray-50">
           {% for f in forecasts %}
-          <tr class="status-{{f.status}} border-b border-white hover:opacity-80 transition">
-            <td class="px-3 py-1.5 font-mono font-bold">{{f.task_id}}</td>
-            <td class="px-3 py-1.5 max-w-xs truncate" title="{{f.description}}">{{f.description}}</td>
-            <td class="px-3 py-1.5">{{f.task_type}}</td>
-            <td class="px-3 py-1.5 font-semibold">{{f.due_date}}</td>
-            <td class="px-3 py-1.5"><span class="px-2 py-0.5 rounded text-xs font-bold {% if f.status=='Overdue' %}bg-red-200 text-red-800{% elif f.status=='Warning' %}bg-yellow-200 text-yellow-800{% else %}bg-blue-200 text-blue-800{% endif %}">{{f.status}}</span></td>
-            <td class="px-3 py-1.5">-</td><td class="px-3 py-1.5">-</td><td class="px-3 py-1.5">-</td>
-            <td class="px-3 py-1.5">{{f.zone or '-'}}</td>
-            <td class="px-3 py-1.5">{{f.access or '-'}}</td>
-            <td class="px-3 py-1.5">{{f.man_hours or '-'}}</td>
-            <td class="px-3 py-1.5">
-              {% if f.pdf_id %}<button onclick="openPdfModal('/download_pdf/{{f.pdf_id}}','{{f.task_id}}')" class="bg-gray-800 text-white px-2 py-0.5 rounded text-xs"><i class="fas fa-file-pdf text-red-400 mr-1"></i>View</button>
-              {% else %}<span class="text-gray-400 text-xs">Missing</span>{% endif %}
+          <tr class="hover:bg-gray-50 transition cursor-default group">
+            <td class="px-4 py-3 font-mono font-bold text-gray-900">{{f.task_id}}</td>
+            <td class="px-4 py-3 text-gray-600">
+              <div class="font-semibold">{{f.description}}</div>
+              <div class="text-[10px] text-gray-400 uppercase mt-0.5">MPD Ref: {{ f.task_card_ref or 'N/A' }} · Zone: {{ f.zone or '-' }}</div>
+            </td>
+            <td class="px-4 py-3"><span class="bg-gray-100 px-2 py-0.5 rounded text-[10px] font-black text-gray-500 uppercase">{{f.task_type}}</span></td>
+            <td class="px-4 py-3 font-bold text-gray-700">{{f.due_date}}</td>
+            <td class="px-4 py-3">
+              <span class="px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-widest {% if f.status=='Overdue' %}bg-red-100 text-red-700{% elif f.status=='Warning' %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                {{f.status}}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              {% if f.pdf_id %}
+              <button onclick="openPdfModal('/download_pdf/{{f.pdf_id}}','{{f.task_id}}')" class="text-red-600 hover:text-red-800 font-bold transition flex items-center gap-1">
+                <i class="fas fa-file-pdf"></i> View
+              </button>
+              {% else %}
+              <span class="text-gray-300 italic">No File</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -848,13 +946,15 @@ body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;}
           <button type="submit" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded"><i class="fas fa-save mr-2"></i>Save Status</button>
         </form>
       </div>
-      <!-- Gemini Key -->
+      <!-- Smart PDF Linker -->
       <div class="bg-white p-6 rounded-lg shadow lg:col-span-2">
-        <form action="/save_gemini_key" method="POST" class="flex gap-3 items-end">
-          <input type="hidden" name="tail" value="{{ aircraft.tail_number }}">
-          <div class="flex-1"><label class="text-xs font-semibold text-gray-600 block mb-1"><i class="fas fa-robot text-purple-600 mr-1"></i>Gemini API Key</label>
-          <input name="gemini_key" type="password" placeholder="AIza..." class="w-full border rounded px-3 py-2 text-sm"></div>
-          <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded whitespace-nowrap">Save Key</button>
+        <h3 class="font-bold text-lg mb-2"><i class="fas fa-magic text-purple-600 mr-2"></i>Smart PDF Auto-Linker</h3>
+        <p class="text-sm text-gray-500 mb-4">Automatically matches PDF files in the "uploads" folder to tasks by matching filenames to Task IDs.</p>
+        <form action="/api/auto_link_pdfs" method="POST">
+           <input type="hidden" name="tail" value="{{ aircraft.tail_number }}">
+           <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded shadow-lg transition transform hover:scale-[1.01] active:scale-100">
+             <i class="fas fa-link mr-2"></i>Run Smart PDF Linker
+           </button>
         </form>
       </div>
     </div>
