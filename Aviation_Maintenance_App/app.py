@@ -582,7 +582,7 @@ CSV:
                     continue
                 
                 if not res.get('is_task_list'):
-                    error_msgs.append(f"Sheet '{sheet}' was not recognized as a task list by AI.")
+                    error_msgs.append(f"AI skipped sheet '{sheet}' (is_task_list=false). JSON: {raw[:200]}")
                     continue
                 col_map    = res.get('columns', {})
                 header_idx = int(res.get('header_row_index', 0))
@@ -595,8 +595,15 @@ CSV:
                     if ai_status.get('current_fc'): upd['current_fc'] = int(ai_status['current_fc'])
                     db().table('aircraft').update(upd).eq('id', target['id']).execute()
 
-                if 'task_id' not in col_map: continue
-                df_data = df.iloc[header_idx+1:].dropna(how='all')
+                if 'task_id' not in col_map:
+                    error_msgs.append(f"AI could not find 'task_id' column in '{sheet}'. Columns found: {col_map}")
+                    continue
+                
+                try:
+                    df_data = df.iloc[header_idx+1:].dropna(how='all')
+                except Exception as e:
+                    error_msgs.append(f"Error slicing dataframe on '{sheet}' at row {header_idx}: {e}")
+                    continue
 
                 batch = []
                 for _, row in df_data.iterrows():
@@ -659,9 +666,14 @@ CSV:
                     })
                     if len(batch) >= 100:
                         db().table('engine_tasks').insert(batch).execute(); batch=[]
-                if batch:
-                    db().table('engine_tasks').insert(batch).execute()
-
+                
+                if not batch:
+                    error_msgs.append(f"No valid tasks were found in '{sheet}' after parsing!")
+                else:
+                    try:
+                        db().table('engine_tasks').insert(batch).execute()
+                    except Exception as e:
+                        error_msgs.append(f"DB Insert Error on '{sheet}': {e}")
             processed.append(target['tail_number'])
             db().table('upload_logs').update({'status':'Success','file_size':f"{len(sheet_names)} sheets"}).eq('filename', file.filename).execute()
 
