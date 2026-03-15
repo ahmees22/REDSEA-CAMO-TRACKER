@@ -550,10 +550,7 @@ def upload_excel():
             # Delete old tasks
             db().table('engine_tasks').delete().eq('aircraft_id', target['id']).execute()
 
-            gemini_key = os.getenv('GEMINI_API_KEY','')
-            if not gemini_key:
-                error_msgs.append("Gemini API Key missing!"); continue
-
+            # Native Heuristic Parser (No Gemini AI)
             for sheet in sheet_names:
                 try:
                     if isinstance(xls, _CsvFakeExcel):
@@ -561,49 +558,69 @@ def upload_excel():
                     else:
                         df = pd.read_excel(file_path, sheet_name=sheet, header=None, engine=read_engine)
                 except Exception as se:
+                    error_msgs.append(f"Error reading sheet {sheet}: {str(se)}")
                     continue
-                if df.empty or len(df) < 3: continue
+                if df.empty or len(df) < 2: continue
 
-                csv_snip = df.head(15).to_csv(index=False)
-                prompt = f"""You are a Senior Aviation CAMO Engineer. Parse this Excel/CSV sheet.
-Output ONLY valid JSON:
-{{"is_task_list":true,"header_row_index":4,"aircraft_status":{{"current_fh":12500,"current_fc":8000,"report_date":"2024-03-10"}},"columns":{{"task_id":0,"description":1,"interval_fh":8,"interval_fc":9,"interval_dy":10,"last_done_date":12,"last_done_fh":13,"last_done_fc":14}}}}
-If not a task sheet return: {{"is_task_list":false}}
-CSV:
-{csv_snip}"""
-                try:
-                    client = genai.Client(api_key=gemini_key)
-                    # Use gemini-1.5-flash-latest to avoid 404 and stricter 2.0 quotas
-                    raw    = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt).text.strip()
-                    s,e    = raw.find('{'), raw.rfind('}')
-                    res    = json.loads(raw[s:e+1]) if s!=-1 else {}
-                except Exception as e:
-                    error_msgs.append(f"Gemini API Error on {sheet}: {str(e)}")
-                    continue
+                # 1. Heuristic Header Search
+                header_idx = 0
+                col_map = {}
+                found_task = False
                 
-                if not res.get('is_task_list'):
-                    error_msgs.append(f"AI skipped sheet '{sheet}' (is_task_list=false). JSON: {raw[:200]}")
+                # Scan first 20 rows for header
+                for r in range(min(20, len(df))):
+                    row_vals = [str(x).upper() for x in df.iloc[r] if pd.notna(x)]
+                    # Keywords for Task ID
+                    if any(k in v for v in row_vals for k in ["TASK NO", "TASK ID", "M.P. REF", "MPD NO", "TASK NUMBER"]):
+                        header_idx = r
+                        found_task = True
+                        # Map columns
+                        for i, val in enumerate(df.iloc[r]):
+                            v = str(val).upper()
+                            if any(k in v for k in ["TASK NO", "TASK ID", "M.P. REF", "MPD NO", "TASK NUMBER"]): col_map['task_id'] = i
+                            elif "DESC" in v or "NOMENCLATURE" in v: col_map['description'] = i
+                            elif ("FH" in v or "HOURS" in v) and "INTERVAL" in v: col_map['interval_fh'] = i
+                            elif ("FC" in v or "CYCLES" in v) and "INTERVAL" in v: col_map['interval_fc'] = i
+                            elif ("DY" in v or "DAYS" in v) and "INTERVAL" in v: col_map['interval_dy'] = i
+                            elif "DATE" in v and "DONE" in v: col_map['last_done_date'] = i
+                            elif "FH" in v and "DONE" in v: col_map['last_done_fh'] = i
+                            elif "FC" in v and "DONE" in v: col_map['last_done_fc'] = i
+                            elif "ZONE" in v: col_map['zone'] = i
+                            elif "ACCESS" in v: col_map['access'] = i
+                        break
+
+                if not found_task:
+                    error_msgs.append(f"Sheet '{sheet}' skipped: Could not find header row with 'Task ID' keywords.")
                     continue
-                col_map    = res.get('columns', {})
-                header_idx = int(res.get('header_row_index', 0))
-                ai_status  = res.get('aircraft_status', {})
-                pkg        = sheet.replace('TASK LIST','').strip() or 'GENERAL'
+
+                # 2. Extract Aircraft Status (optional) from top rows
+                ai_status = {}
+                for r in range(min(header_idx, len(df))):
+                    for i, val in enumerate(df.iloc[r]):
+                        v = str(val).upper()
+                        if "TOTAL" in v and ("FH" in v or "HOURS" in v):
+                            try:
+                                # Look for number in next cell
+                                next_val = df.iloc[r, i+1]
+                                if pd.notna(next_val): ai_status['current_fh'] = float(re.sub(r'[^\d\.]','', str(next_val)))
+                            except: pass
+                        if "TOTAL" in v and ("FC" in v or "CYCLES" in v):
+                            try:
+                                next_val = df.iloc[r, i+1]
+                                if pd.notna(next_val): ai_status['current_fc'] = int(float(re.sub(r'[^\d\.]','', str(next_val))))
+                            except: pass
 
                 if ai_status:
                     upd = {'last_updated_by': current_user_email()}
-                    if ai_status.get('current_fh'): upd['current_fh'] = float(ai_status['current_fh'])
-                    if ai_status.get('current_fc'): upd['current_fc'] = int(ai_status['current_fc'])
+                    if ai_status.get('current_fh'): upd['current_fh'] = ai_status['current_fh']
+                    if ai_status.get('current_fc'): upd['current_fc'] = ai_status['current_fc']
                     db().table('aircraft').update(upd).eq('id', target['id']).execute()
 
-                if 'task_id' not in col_map:
-                    error_msgs.append(f"AI could not find 'task_id' column in '{sheet}'. Columns found: {col_map}")
-                    continue
-                
+                # 3. Process Task Rows
+                pkg = sheet.replace('TASK LIST','').strip() or 'GENERAL'
                 try:
                     df_data = df.iloc[header_idx+1:].dropna(how='all')
-                except Exception as e:
-                    error_msgs.append(f"Error slicing dataframe on '{sheet}' at row {header_idx}: {e}")
-                    continue
+                except: continue
 
                 batch = []
                 for _, row in df_data.iterrows():
@@ -617,27 +634,14 @@ CSV:
                         return None
 
                     tid = gv('task_id')
-                    if not tid: continue
+                    if not tid or str(tid).strip() == "": continue
 
-                    # Parse interval
-                    fh,fc,dy = None,None,None
-                    if gv('interval_fh'):
-                        try: fh = float(gv('interval_fh'))
-                        except: pass
-                    if gv('interval_fc'):
-                        try: fc = int(float(gv('interval_fc')))
-                        except: pass
-                    if gv('interval_dy'):
-                        try: dy = int(float(gv('interval_dy')))
-                        except: pass
-                    # Unified interval string fallback
-                    istr = str(gv('interval') or '')
-                    if istr and not fh:
-                        m = re.search(r'([\d,\.]+)\s*FH', istr, re.I)
-                        if m: fh = float(m.group(1).replace(',',''))
-                    if istr and not fc:
-                        m = re.search(r'([\d,\.]+)\s*FC', istr, re.I)
-                        if m: fc = int(float(m.group(1).replace(',','')))
+                    fh, fc, dy = None, None, None
+                    try:
+                        if col_map.get('interval_fh') is not None: fh = float(re.sub(r'[^\d\.]','', str(gv('interval_fh') or '0')))
+                        if col_map.get('interval_fc') is not None: fc = int(float(re.sub(r'[^\d\.]','', str(gv('interval_fc') or '0'))))
+                        if col_map.get('interval_dy') is not None: dy = int(float(re.sub(r'[^\d\.]','', str(gv('interval_dy') or '0'))))
+                    except: pass
 
                     last_date = None
                     vd = gv('last_done_date')
@@ -652,28 +656,27 @@ CSV:
                         'description': f"[{pkg}] {str(gv('description') or 'N/A').strip()}",
                         'task_type': pkg, 'zone': str(gv('zone') or '')[:50] or None,
                         'access': str(gv('access') or '')[:50] or None,
-                        'applicability': str(gv('applicability') or '')[:50] or None,
-                        'man_hours': str(gv('man_hours') or '')[:20] or None,
-                        'task_card_ref': str(gv('task_card_ref') or '')[:50] or None,
-                        'material': str(gv('material') or '')[:200] or None,
-                        'tools': str(gv('tools') or '')[:200] or None,
-                        'notes': str(gv('notes') or '')[:500] or None,
-                        'interval_fh': fh, 'interval_fc': fc, 'interval_days': dy,
-                        'last_done_fh': float(gv('last_done_fh') or 0) if gv('last_done_fh') else 0.0,
-                        'last_done_fc': int(float(gv('last_done_fc') or 0)) if gv('last_done_fc') else 0,
+                        'interval_fh': fh if fh and fh > 0 else None,
+                        'interval_fc': fc if fc and fc > 0 else None,
+                        'interval_days': dy if dy and dy > 0 else None,
+                        'last_done_fh': float(re.sub(r'[^\d\.]','', str(gv('last_done_fh') or '0'))) if gv('last_done_fh') else 0.0,
+                        'last_done_fc': int(float(re.sub(r'[^\d\.]','', str(gv('last_done_fc') or '0')))) if gv('last_done_fc') else 0,
                         'last_done_date': last_date or datetime.datetime.utcnow().isoformat(),
                         'last_updated_by': current_user_email()
                     })
+
                     if len(batch) >= 100:
                         db().table('engine_tasks').insert(batch).execute(); batch=[]
-                
-                if not batch:
-                    error_msgs.append(f"No valid tasks were found in '{sheet}' after parsing!")
-                else:
+
+                if batch:
                     try:
                         db().table('engine_tasks').insert(batch).execute()
                     except Exception as e:
-                        error_msgs.append(f"DB Insert Error on '{sheet}': {e}")
+                        error_msgs.append(f"DB Insert Error on '{sheet}': {str(e)}")
+                
+                if not batch and not ai_status:
+                    error_msgs.append(f"Sheet '{sheet}' processed but no tasks found matching patterns.")
+
             processed.append(target['tail_number'])
             db().table('upload_logs').update({'status':'Success','file_size':f"{len(sheet_names)} sheets"}).eq('filename', file.filename).execute()
 
