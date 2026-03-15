@@ -573,7 +573,8 @@ CSV:
 {csv_snip}"""
                 try:
                     client = genai.Client(api_key=gemini_key)
-                    raw    = client.models.generate_content(model='gemini-2.0-flash', contents=prompt).text.strip()
+                    # Use gemini-1.5-flash to avoid stricter 2.0 quotas
+                    raw    = client.models.generate_content(model='gemini-1.5-flash', contents=prompt).text.strip()
                     s,e    = raw.find('{'), raw.rfind('}')
                     res    = json.loads(raw[s:e+1]) if s!=-1 else {}
                 except Exception as e:
